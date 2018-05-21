@@ -1,6 +1,0 @@
-{
-	"name": "showhook",
-	"profile": "uneet-dev",
-	"regions": [ "ap-southeast-1" ],
-	"error_pages": { "disable": true }
-}
