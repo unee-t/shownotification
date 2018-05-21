@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"html/template"
 	"net/http"
+	"net/http/httputil"
 	"os"
 
 	"github.com/apex/log"
@@ -29,7 +31,11 @@ func main() {
 }
 
 func (h handler) hook(w http.ResponseWriter, r *http.Request) {
-	h.es.SendEventMessage(r.UserAgent(), "", "")
+	dump, err := httputil.DumpRequest(r, true)
+	if err != nil {
+		fmt.Fprintln(w, err.Error())
+	}
+	h.es.SendEventMessage(string(dump), "", "")
 }
 
 func handleIndex(w http.ResponseWriter, r *http.Request) {
