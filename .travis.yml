@@ -4,7 +4,7 @@ services:
 - docker
 
 install:
- - docker build -t uneet/showhook .
+ - docker build -t uneet/showhook --build-arg COMMIT=${TRAVIS_COMMIT} .
 
 after_success:
   - if [ "$TRAVIS_BRANCH" == "master" ]; then
