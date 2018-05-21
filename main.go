@@ -1,12 +1,11 @@
 package main
 
 import (
+	"html/template"
 	"net/http"
 	"os"
 
 	"github.com/apex/log"
-	jsonhandler "github.com/apex/log/handlers/json"
-	"github.com/apex/log/handlers/text"
 	"gopkg.in/antage/eventsource.v1"
 )
 
@@ -14,20 +13,12 @@ type handler struct {
 	es eventsource.EventSource
 }
 
-func init() {
-	if os.Getenv("UP_STAGE") == "" {
-		log.SetHandler(text.Default)
-	} else {
-		log.SetHandler(jsonhandler.Default)
-	}
-}
-
 func main() {
 	es := eventsource.New(nil, nil)
 	defer es.Close()
 	h := handler{es: es}
 
-	http.Handle("/", http.FileServer(http.Dir("./public")))
+	http.Handle("/", http.HandlerFunc(handleIndex))
 	http.Handle("/events", es)
 	http.Handle("/hook", http.HandlerFunc(h.hook))
 
@@ -38,6 +29,13 @@ func main() {
 }
 
 func (h handler) hook(w http.ResponseWriter, r *http.Request) {
-	h.es.SendEventMessage("hello", "", "")
+	h.es.SendEventMessage(r.UserAgent(), "", "")
+}
 
+func handleIndex(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("X-Robots-Tag", "none")
+	t := template.Must(template.New("").ParseGlob("public/*.html"))
+	t.ExecuteTemplate(w, "index.html", map[string]interface{}{
+		"COMMIT": os.Getenv("COMMIT"),
+	})
 }
