@@ -1,19 +1,24 @@
+USER=stephenlb
 NAME=showhook
-REPO=uneet/$(NAME)
+REPO=$(USER)/$(NAME)
 
-.PHONY: start stop build sh
+.PHONY: network start stop build sh
 
 all: build
 
 build:
-	docker build -t $(REPO) --build-arg COMMIT=$(shell git describe --always) .
+	docker build . -t $(NAME) --build-arg COMMIT=$(shell git describe --always)
 
+network:
+	docker network create -d bridge --subnet 192.168.0.0/24 --gateway 192.168.0.1 $(NAME)
+
+run: start
 start:
-	docker run -d --name $(NAME) -p 9000:9000 $(REPO)
+	docker run -e PORT=$(PORT) -e NEIGHBORS=$(NEIGHBORS) -p $(PORT):$(PORT) --net=$(NAME) -d $(NAME)
 
 stop:
 	docker stop $(NAME)
 	docker rm $(NAME)
 
 sh:
-	docker exec -it $(NAME) /bin/sh
+	docker run -it $(NAME)
