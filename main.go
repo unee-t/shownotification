@@ -15,6 +15,11 @@ import (
 	"gopkg.in/antage/eventsource.v1"
 )
 
+var queueurl = aws.String("https://sqs.ap-southeast-1.amazonaws.com/812644853088/atest")
+
+// https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-long-polling.html
+var longpollDuration = int64(20)
+
 type handler struct {
 	es eventsource.EventSource
 }
@@ -31,6 +36,15 @@ func main() {
 	http.Handle("/", http.HandlerFunc(handleIndex))
 	http.Handle("/events", es)
 	http.Handle("/hook", http.HandlerFunc(h.hook))
+
+	go func() {
+		for {
+			if es.ConsumersCount() > 0 { // Should only run if there is an active client
+				h.receiveSQS()
+			}
+			log.Infof("Long polling %ds", longpollDuration)
+		}
+	}()
 
 	addr := ":" + os.Getenv("PORT")
 	if err := http.ListenAndServe(addr, nil); err != nil {
@@ -50,19 +64,32 @@ func (h handler) receiveSQS() {
 	sqssvc := sqs.New(cfg)
 
 	msgReq := sqssvc.ReceiveMessageRequest(&sqs.ReceiveMessageInput{
-		QueueUrl: aws.String("https://sqs.ap-southeast-1.amazonaws.com/812644853088/atest"),
+		WaitTimeSeconds: aws.Int64(longpollDuration), // Long poll for 10
+		QueueUrl:        queueurl,
 	})
 
 	log.Info("Requesting from SQS")
-	msgs, err := msgReq.Send()
+	msgs, err := msgReq.Send() // I kind of expected this to block until a message appeared
 	if err != nil {
 		panic(err)
 	}
 	var sqsm sqsmessage
 	for _, msg := range msgs.Messages {
-		log.Infof("SQS Receive Message %s", &msg.Body)
+		log.Infof("Payload %v", msg)
 		json.Unmarshal([]byte(*msg.Body), &sqsm)
-		log.Infof("here %s", sqsm.Message)
+
+		// in the Unee-T platform, only the consumer that processes the relevant message should delete it
+		delReq := sqssvc.DeleteMessageRequest(&sqs.DeleteMessageInput{
+			QueueUrl:      queueurl,
+			ReceiptHandle: msg.ReceiptHandle,
+		})
+
+		_, err := delReq.Send()
+		if err != nil {
+			panic(err)
+		}
+		log.Infof("%v deleted", *msg.MessageId)
+
 	}
 
 	h.es.SendEventMessage(sqsm.Message, "", "")
@@ -74,7 +101,6 @@ func (h handler) hook(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, err.Error())
 	}
 	h.es.SendEventMessage(string(dump), "", "")
-	h.receiveSQS()
 }
 
 func handleIndex(w http.ResponseWriter, r *http.Request) {
