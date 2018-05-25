@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/apex/log"
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws/external"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go/aws"
@@ -24,10 +25,6 @@ type handler struct {
 	es eventsource.EventSource
 }
 
-type sqsmessage struct {
-	Message string
-}
-
 func main() {
 	es := eventsource.New(nil, nil)
 	defer es.Close()
@@ -40,9 +37,11 @@ func main() {
 	go func() {
 		for {
 			if es.ConsumersCount() > 0 { // Should only run if there is an active client
+				log.Infof("START Long polling %ds", longpollDuration)
 				h.receiveSQS()
+				log.Infof("END Long polling %ds", longpollDuration)
 			}
-			log.Infof("Long polling %ds", longpollDuration)
+			// Is it ok if these goes in a crazy loop whilst waiting for an eventsource client?
 		}
 	}()
 
@@ -68,15 +67,14 @@ func (h handler) receiveSQS() {
 		QueueUrl:        queueurl,
 	})
 
-	log.Info("Requesting from SQS")
 	msgs, err := msgReq.Send() // I kind of expected this to block until a message appeared
 	if err != nil {
 		panic(err)
 	}
-	var sqsm sqsmessage
+	var snsmsg events.SNSEntity
 	for _, msg := range msgs.Messages {
 		log.Infof("Payload %v", msg)
-		json.Unmarshal([]byte(*msg.Body), &sqsm)
+		json.Unmarshal([]byte(*msg.Body), &snsmsg)
 
 		// in the Unee-T platform, only the consumer that processes the relevant message should delete it
 		delReq := sqssvc.DeleteMessageRequest(&sqs.DeleteMessageInput{
@@ -88,11 +86,11 @@ func (h handler) receiveSQS() {
 		if err != nil {
 			panic(err)
 		}
-		log.Infof("%v deleted", *msg.MessageId)
+		log.Infof("SQS MessageId: %v deleted (SNS MessageId: %s)", *msg.MessageId, snsmsg.MessageID)
 
 	}
 
-	h.es.SendEventMessage(sqsm.Message, "", "")
+	h.es.SendEventMessage(snsmsg.Message, "", "")
 }
 
 func (h handler) hook(w http.ResponseWriter, r *http.Request) {
