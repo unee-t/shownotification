@@ -1,3 +1,11 @@
+Originally this project set out to consume AWS SQS messages. This approach
+doesn't work since you can't have more than one listener on a SQS queue. Please
+see https://www.youtube.com/watch?v=bKFZVNzloiA for more details on the topic.
+
+I've since accepted a contribution from this [SO
+answer](https://stackoverflow.com/a/50498987/4534) which forms a better /
+simpler example of how you could do it.
+
 # EventSource Server
 
 Server Sent Events (SSE) allows clients to receive notifications.
